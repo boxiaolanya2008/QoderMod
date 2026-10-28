@@ -65,9 +65,10 @@ build.bat
 1. 双击 `bin\QoderModLauncher.exe`；
 2. 选 `[1]` 启动并注入（Qoder 已运行则注入当前实例）；
 3. Qoder 顶部菜单出现 **QoderMod**（或按 `Ctrl+Shift+M`）打开设置中心；
-4. 所有配置在面板内修改并保存（写入 `qcmod.json`，2 秒内热更新）。
+4. 所有配置在面板内修改并保存（写入 `qcmod.json`，2 秒内热更新）；
+5. `[4] 查看请求/注入日志`：实时查看渲染层捕获的请求（`INJECTED/PASS`、注入字数、提示词样本、URL）。注意：仅渲染层请求可见，聊天请求运行在主进程时不会出现在此日志。
 
-命令行：`QoderModLauncher.exe --launch`（启动并注入）/ `--inject`（仅注入）/ `--find`（定位安装位置）。
+命令行：`QoderModLauncher.exe --launch`（启动并注入）/ `--inject`（仅注入）/ `--find`（定位安装位置）/ `--reqlog`（打印最近请求/注入记录）。
 
 ### 已知限制
 
