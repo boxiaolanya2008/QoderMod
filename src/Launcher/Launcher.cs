@@ -76,6 +76,11 @@ namespace QoderMod
                 Log(p0 == null ? T("未找到 Qoder", "Qoder not found") : "QODER=" + p0);
                 return;
             }
+            if (mode == "--reqlog")
+            {
+                PrintReqTail(30);
+                return;
+            }
             Interactive();
         }
 
@@ -89,6 +94,69 @@ namespace QoderMod
             Console.WriteLine();
             Console.Write(msg);
             Console.ReadLine();
+        }
+
+        private static string ReqLogPath()
+        {
+            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs", "requests.log");
+        }
+
+        private static void PrintReqTail(int n)
+        {
+            string p = ReqLogPath();
+            if (!File.Exists(p))
+            {
+                Log(T("暂无请求记录（仅渲染层请求可见；聊天请求在主进程时不会记录）",
+                      "No request records yet (renderer requests only; main-process chat traffic is not captured)"));
+                return;
+            }
+            try
+            {
+                string[] lines = File.ReadAllLines(p, Encoding.UTF8);
+                int start = Math.Max(0, lines.Length - n);
+                for (int i = start; i < lines.Length; i++) Console.WriteLine(lines[i]);
+            }
+            catch (Exception ex)
+            {
+                Log(ex.Message);
+            }
+        }
+
+        private static void ViewRequestLogLive()
+        {
+            PrintReqTail(20);
+            Console.WriteLine(T("—— 实时监听新记录（回车返回菜单）——", "—— live view (Enter to return) ——"));
+            string p = ReqLogPath();
+            long pos = 0;
+            try { if (File.Exists(p)) pos = new FileInfo(p).Length; } catch { }
+            while (true)
+            {
+                try
+                {
+                    if (File.Exists(p))
+                    {
+                        using (FileStream fs = new FileStream(p, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                        {
+                            if (fs.Length < pos) pos = 0;
+                            if (fs.Length > pos)
+                            {
+                                fs.Seek(pos, SeekOrigin.Begin);
+                                byte[] buf = new byte[fs.Length - pos];
+                                int rd = fs.Read(buf, 0, buf.Length);
+                                pos += rd;
+                                Console.Write(Encoding.UTF8.GetString(buf, 0, rd));
+                            }
+                        }
+                    }
+                }
+                catch { }
+                if (Console.KeyAvailable)
+                {
+                    ConsoleKeyInfo k = Console.ReadKey(true);
+                    if (k.Key == ConsoleKey.Enter) break;
+                }
+                Thread.Sleep(500);
+            }
         }
 
         private static void Interactive()
@@ -107,6 +175,7 @@ namespace QoderMod
                 Console.WriteLine(T(" [1] 启动并注入（若已运行则注入当前实例）", " [1] Launch & inject (inject into running instance if any)"));
                 Console.WriteLine(T(" [2] 关闭 Qoder 并重启", " [2] Close Qoder and relaunch"));
                 Console.WriteLine(T(" [3] 重新定位 Qoder（全盘扫描）", " [3] Relocate Qoder (full scan)"));
+                Console.WriteLine(T(" [4] 查看请求/注入日志（实时）", " [4] View request/injection log (live)"));
                 Console.WriteLine(T(" [0] 退出", " [0] Exit"));
                 Console.WriteLine("============================================");
                 Console.Write(T("请选择: ", "Select: "));
@@ -119,6 +188,7 @@ namespace QoderMod
                 if (line == "1") { RunLaunchInject(); Pause(T("按回车返回菜单...", "Press Enter to return...")); }
                 else if (line == "2") { RunRestartInject(); Pause(T("按回车返回菜单...", "Press Enter to return...")); }
                 else if (line == "3") { QoderLocator.Find(Log, true); Pause(T("按回车返回菜单...", "Press Enter to return...")); }
+                else if (line == "4") { ViewRequestLogLive(); }
                 else Log(T("无效选项: ", "Invalid option: ") + line);
             }
         }
@@ -290,6 +360,8 @@ namespace QoderMod
                     {
                         Log(T("完成: 已注入 PID " + target + "，设置中心会在 1-3 秒内在 Qoder 中挂载。",
                               "Done: injected PID " + target + "; panel mounts in 1-3s."));
+                        Log(T("请求记录可在菜单 [4] 实时查看（bin\\logs\\requests.log，仅渲染层请求可见）",
+                              "Request log: menu [4] live view (bin\\logs\\requests.log, renderer requests only)"));
                     }
                     else
                     {

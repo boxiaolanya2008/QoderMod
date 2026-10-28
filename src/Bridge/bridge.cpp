@@ -1421,6 +1421,97 @@ static DWORD WINAPI Worker(LPVOID)
             }
         }
 
+        // 渲染层请求记录 → bin\logs\requests.log（供启动器控制台查看）
+        {
+            static DWORD lastReq = 0;
+            static double lastReqTs = 0;
+            if (!injected.empty() && GetTickCount() - lastReq > 1200)
+            {
+                lastReq = GetTickCount();
+                for (std::map<std::string, std::string>::iterator it = injected.begin();
+                     it != injected.end(); ++it)
+                {
+                    std::string raw;
+                    if (!CdpEvalValue(it->second, "localStorage.getItem('__QMOD_REQLOG__')", raw, 2000))
+                    {
+                        static DWORD lastRdFail = 0;
+                        if (GetTickCount() - lastRdFail > 10000)
+                        {
+                            lastRdFail = GetTickCount();
+                            LogA("请求日志读取失败(CDP)");
+                        }
+                        continue;
+                    }
+                    if (raw.size() < 5 || raw == "null")
+                    {
+                        static DWORD lastEmpty = 0;
+                        if (GetTickCount() - lastEmpty > 10000)
+                        {
+                            lastEmpty = GetTickCount();
+                            LogA(std::string("请求日志为空 raw=") + raw);
+                        }
+                        continue;
+                    }
+                    JParser jp(raw);
+                    J arr = jp.parse();
+                    if (!jp.ok || arr.t != 4)
+                    {
+                        LogA("请求日志解析失败 len=" + Itoa((unsigned long)raw.size()));
+                        continue;
+                    }
+                    if (arr.a.empty()) continue;
+                    const J* first = JGet(arr.a[0], "t");
+                    double maxTs = (first && first->t == 2) ? first->n : 0;
+                    std::vector<std::string> lines;
+                    for (int i = (int)arr.a.size() - 1; i >= 0; --i)
+                    {
+                        const J& e = arr.a[i];
+                        const J* pt = JGet(e, "t");
+                        double ts = (pt && pt->t == 2) ? pt->n : 0;
+                        if (ts <= lastReqTs) continue;
+                        const J* pu = JGet(e, "url");
+                        const J* pj = JGet(e, "injected");
+                        const J* pl = JGet(e, "extraLen");
+                        const J* ps = JGet(e, "sample");
+                        std::string smp = (ps && ps->t == 3) ? ps->s : std::string();
+                        for (size_t q = 0; q < smp.size(); ++q)
+                            if (smp[q] == '\n' || smp[q] == '\r') smp[q] = ' ';
+                        char tb[32];
+                        sprintf(tb, "%.0f", ts);
+                        std::string line = std::string("[") + tb + "] " +
+                            ((pj && pj->t == 1 && pj->b) ? "INJECTED" : "PASS") +
+                            " extra=" + Itoa((pl && pl->t == 2) ? (unsigned long)pl->n : 0) +
+                            " url=" + ((pu && pu->t == 3) ? pu->s : std::string()) +
+                            " | " + smp;
+                        lines.push_back(line);
+                        if (lines.size() >= 50) break;
+                    }
+                    if (!lines.empty())
+                    {
+                        std::wstring dir = g_dir + L"\\logs";
+                        CreateDirectoryW(dir.c_str(), NULL);
+                        std::wstring rp = dir + L"\\requests.log";
+                        HANDLE h = CreateFileW(rp.c_str(), FILE_APPEND_DATA,
+                                               FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                                               OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+                        if (h != INVALID_HANDLE_VALUE)
+                        {
+                            DWORD wr = 0;
+                            for (size_t k = 0; k < lines.size(); ++k)
+                            {
+                                WriteFile(h, lines[k].c_str(), (DWORD)lines[k].size(), &wr, NULL);
+                                WriteFile(h, "\r\n", 2, &wr, NULL);
+                            }
+                            CloseHandle(h);
+                        }
+                        lastReqTs = maxTs;
+                        LogA("请求记录 x" + Itoa((unsigned long)lines.size()) + " 已写入 requests.log");
+                    }
+                    break;
+                }
+            }
+        }
+
         // hook.js / ui.js 更新后自动重载，并热推送到已注入页面
         ULONGLONG hm = FileMtime(hookPath);
         ULONGLONG um = FileMtime(uiPath);

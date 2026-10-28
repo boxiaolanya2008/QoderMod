@@ -3,7 +3,7 @@
 // 职责: 挂钩 fetch / XMLHttpRequest，按配置注入 基础提示词 + 启用规则 + 安全研究 + 变量
 // 支持热更新: 重复装载时原地替换内核函数，请求包装层保持单层
 (function () {
-  var VERSION = '3.0';
+  var VERSION = '3.2';
   var prev = window.__QMOD_CORE__ || null;
 
   var cfg;
@@ -84,10 +84,12 @@
   }
 
   function patchBody(bodyStr) {
-    if (!cfg.enabled) return bodyStr;
-    var extra = effectivePrompt();
-    if (!extra) return bodyStr;
     if (!relevant(bodyStr)) return bodyStr;
+    var extra = cfg.enabled ? effectivePrompt() : '';
+    if (!extra) {
+      recordReq(lastUrl, false, 0, '');
+      return bodyStr;
+    }
 
     var body;
     try { body = JSON.parse(bodyStr); } catch (e) { return bodyStr; }
@@ -136,14 +138,42 @@
       touched = true;
     }
 
-    if (!touched) return bodyStr;
-    try { return JSON.stringify(body); } catch (e) { return bodyStr; }
+    if (!touched) {
+      recordReq(lastUrl, false, 0, '');
+      return bodyStr;
+    }
+    try {
+      recordReq(lastUrl, true, extra.length, extra.slice(0, 160));
+      return JSON.stringify(body);
+    } catch (e) { return bodyStr; }
+  }
+
+  var reqLog = (prev && prev.reqLog) ? prev.reqLog : [];
+  var lastUrl = (prev && prev.lastUrl) || '';
+
+  function recordReq(url, injected, extraLen, sample) {
+    try {
+      reqLog.unshift({
+        t: Date.now(),
+        url: String(url || '').slice(0, 140),
+        injected: !!injected,
+        extraLen: extraLen || 0,
+        sample: String(sample || '').slice(0, 160)
+      });
+      if (reqLog.length > 30) reqLog.pop();
+      window.__QMOD_REQLOG__ = reqLog;
+      try { localStorage.setItem('__QMOD_REQLOG__', JSON.stringify(reqLog)); } catch (e) {}
+    } catch (e) {}
   }
 
   var core = prev || {};
   core.version = VERSION;
   core.cfg = cfg;
   core.RULES = RULES;
+  core.reqLog = reqLog;
+  core.recordReq = recordReq;
+  core.recordUrl = function (u) { lastUrl = String(u || ''); };
+  core.lastUrl = '';
   core.effectivePrompt = effectivePrompt;
   core.patchBody = patchBody;
   core.relevant = relevant;
@@ -158,6 +188,8 @@
       window.fetch = function (input, init) {
         try {
           if (init && typeof init.body === 'string' && core.relevant(init.body)) {
+            var url = typeof input === 'string' ? input : (input && input.url) || '';
+            core.recordUrl(url);
             var nb = core.patchBody(init.body);
             if (nb !== init.body) {
               var ni = {};
@@ -186,6 +218,7 @@
     XMLHttpRequest.prototype.send = function (body) {
       try {
         if (typeof body === 'string' && core.relevant(body)) {
+          core.recordUrl(this.__qmodUrl || '');
           var nb = core.patchBody(body);
           if (nb !== body) {
             core.log('XHR 请求已修改');
@@ -205,6 +238,7 @@
   window.__QMOD_INSTALLED__ = true;
   window.__QMOD__ = cfg;
   window.__QMOD_RULES__ = RULES;
+  window.__QMOD_REQLOG__ = reqLog;
   window.__QMOD_EFFECTIVE_PROMPT__ = effectivePrompt;
   window.__QMOD_SET_CONFIG__ = setConfig;
 

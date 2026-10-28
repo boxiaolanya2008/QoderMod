@@ -119,7 +119,7 @@ Requirements: x64 MinGW (default `D:\Dev-Cpp\mingw64\bin\g++.exe`) and the .NET 
 3. Open **QoderMod** from Qoder's top menu (or `Ctrl+Shift+M`);
 4. Edit and save settings (written to `qcmod.json`, hot-applied within ~2s).
 
-CLI: `--launch`, `--inject`, `--find`.
+CLI: `--launch`, `--inject`, `--find`, `--reqlog` (print recent request/injection log). Note: only renderer-originated requests are visible; chat traffic handled by the main process does not appear here.
 
 ### Known limitations
 
