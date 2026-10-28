@@ -1,0 +1,14 @@
+# build outputs
+bin/
+*.dll
+*.exe
+*.old
+*.tmp
+
+# logs & local caches
+logs/
+*.log
+qoder-exe.txt
+mod.ini
+mod.token
+qcmod.json
